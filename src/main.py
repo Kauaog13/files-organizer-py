@@ -2,61 +2,68 @@ import os
 import shutil
 import json
 import sys
+# Removido: import logging (pois será configurado via util)
+# Removido: from datetime import datetime (pois será usado apenas no util de log)
+
+# Importa a função de configuração de log
+from utils.logger_config import setup_logging
 
 # --- CONFIGURAÇÃO ---
-# Obtenha o diretório base do script (onde main.py está)
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
-# Caminho para o arquivo de configurações de categorias
 CATEGORIES_CONFIG_PATH = os.path.join(BASE_DIR, '..', 'config', 'categories.json')
+
+# Configura o logger chamando a função do módulo separado
+logger = setup_logging(BASE_DIR)
+
 
 # --- FUNÇÃO PARA CARREGAR CATEGORIAS ---
 def load_categories(config_path):
     try:
         with open(config_path, 'r', encoding='utf-8') as f:
             categories = json.load(f)
+        logger.info(f"Categorias carregadas de '{config_path}'.")
         return categories
     except FileNotFoundError:
-        print(f"Erro: O arquivo de configurações de categorias '{config_path}' não foi encontrado.")
+        logger.error(f"Erro: O arquivo de configurações de categorias '{config_path}' não foi encontrado.")
         sys.exit(1)
     except json.JSONDecodeError:
-        print(f"Erro: O arquivo '{config_path}' não é um JSON válido. Verifique a sintaxe.")
+        logger.error(f"Erro: O arquivo '{config_path}' não é um JSON válido. Verifique a sintaxe.")
         sys.exit(1)
     except Exception as e:
-        print(f"Erro ao carregar categorias de '{config_path}': {e}")
+        logger.error(f"Erro inesperado ao carregar categorias de '{config_path}': {e}")
         sys.exit(1)
 
 # Carrega as categorias do arquivo JSON
 categorias = load_categories(CATEGORIES_CONFIG_PATH)
 
-# A categoria para arquivos não listados no JSON
 categoria_outros = "Outros"
 if categoria_outros not in categorias:
     categorias[categoria_outros] = []
 
-print(f"--- Bem-vindo ao files-organizer-py! ---")
-print("Categorias configuradas:")
+logger.info(f"--- Bem-vindo ao files-organizer-py! ---")
+logger.info("Categorias configuradas:")
 for categoria, extensoes in categorias.items():
     if categoria != categoria_outros:
-        print(f"  {categoria}: {', '.join(extensoes)}")
-print(f"  Arquivos não categorizados irão para: {categoria_outros}")
-print("-" * 40)
+        logger.info(f"  {categoria}: {', '.join(extensoes)}")
+logger.info(f"  Arquivos não categorizados irão para: {categoria_outros}")
+logger.info("-" * 40)
 
 # --- 1. SOLICITA A PASTA DE ORIGEM AO USUÁRIO ---
 while True:
     pasta_origem_input = input("Digite o caminho completo da pasta que deseja organizar (ou 'sair' para encerrar): ").strip()
 
     if pasta_origem_input.lower() == 'sair':
-        print("Organizador encerrado pelo usuário.")
+        logger.info("Organizador encerrado pelo usuário.")
         sys.exit(0)
 
     pasta_origem = os.path.normpath(pasta_origem_input)
 
     if not os.path.isdir(pasta_origem):
-        print(f"Erro: A pasta '{pasta_origem}' não existe ou o caminho está incorreto. Por favor, verifique e tente novamente.")
+        logger.warning(f"Erro: A pasta '{pasta_origem}' não existe ou o caminho está incorreto. Por favor, verifique e tente novamente.")
     else:
         break
 
-print(f"\nIniciando análise da pasta: {pasta_origem}")
+logger.info(f"Iniciando análise da pasta: {pasta_origem}")
 
 movimentos_planejados = []
 arquivos_ignorados = 0
@@ -67,14 +74,14 @@ for nome_item in os.listdir(pasta_origem):
 
     if os.path.isdir(caminho_completo_item):
         if nome_item in categorias:
-            print(f"Ignorando pasta de categoria: '{nome_item}'")
+            logger.info(f"Ignorando pasta de categoria: '{nome_item}'")
         else:
-            print(f"Ignorando pasta: '{nome_item}'")
+            logger.info(f"Ignorando pasta: '{nome_item}'")
         arquivos_ignorados += 1
         continue
     
     if nome_item.startswith('.'):
-        print(f"Ignorando arquivo oculto: '{nome_item}'")
+        logger.info(f"Ignorando arquivo oculto: '{nome_item}'")
         arquivos_ignorados += 1
         continue
 
@@ -98,22 +105,22 @@ for nome_item in os.listdir(pasta_origem):
             "destino_pasta": caminho_pasta_destino,
             "destino_nome_curto": pasta_destino_nome
         })
-        print(f"  Planejado: '{nome_item}' -> '{pasta_destino_nome}{os.sep}{nome_item}'")
+        logger.info(f"  Planejado: '{nome_item}' -> '{pasta_destino_nome}{os.sep}{nome_item}'")
     else:
-        print(f"Ignorando item (não é um arquivo nem pasta de categoria): '{nome_item}'")
+        logger.info(f"Ignorando item (não é um arquivo nem pasta de categoria): '{nome_item}'")
         arquivos_ignorados += 1
 
 # --- 3. PERGUNTA CONFIRMAÇÃO ANTES DE MOVER ---
 if not movimentos_planejados:
-    print("\nNenhum arquivo elegível para organização foi encontrado.")
+    logger.info("\nNenhum arquivo elegível para organização foi encontrado.")
 else:
-    print(f"\nTotal de {len(movimentos_planejados)} arquivo(s) planejado(s) para organização.")
+    logger.info(f"\nTotal de {len(movimentos_planejados)} arquivo(s) planejado(s) para organização.")
     confirmacao = input("Deseja prosseguir com a organização? (s/n): ").lower().strip()
 
     if confirmacao != 's':
-        print("Organização cancelada pelo usuário.")
+        logger.info("Organização cancelada pelo usuário.")
     else:
-        print("\nIniciando execução da organização...")
+        logger.info("\nIniciando execução da organização...")
         arquivos_movidos = 0
         arquivos_com_erro = 0
 
@@ -124,24 +131,24 @@ else:
             destino_pasta = movimento["destino_pasta"]
             destino_nome_curto = movimento["destino_nome_curto"]
 
-            print(f"Executando '{arquivo}' -> '{destino_nome_curto}{os.sep}{arquivo}'...")
+            logger.info(f"Executando '{arquivo}' -> '{destino_nome_curto}{os.sep}{arquivo}'...")
             try:
                 os.makedirs(destino_pasta, exist_ok=True)
                 shutil.move(origem, destino_pasta)
-                print(f"  -> Movido com sucesso.")
+                logger.info(f"  -> Movido com sucesso.")
                 arquivos_movidos += 1
             except shutil.Error as e:
-                print(f"  !!! ERRO ao mover '{arquivo}'. Motivo: {e}")
-                print(f"  (Verifique se o arquivo já existe no destino ou se há permissões.)")
+                logger.error(f"  !!! ERRO ao mover '{arquivo}'. Motivo: {e}")
+                logger.error(f"  (Verifique se o arquivo já existe no destino ou se há permissões.)")
                 arquivos_com_erro += 1
             except Exception as e:
-                print(f"  !!! ERRO INESPERADO ao processar '{arquivo}': {e}")
+                logger.critical(f"  !!! ERRO CRÍTICO INESPERADO ao processar '{arquivo}': {e}")
                 arquivos_com_erro += 1
 
-        print("-" * 40)
-        print("\n--- ORGANIZAÇÃO CONCLUÍDA! ---")
-        print(f"Total de arquivos movidos: {arquivos_movidos}")
-        print(f"Total de arquivos com erro: {arquivos_com_erro}")
+        logger.info("-" * 40)
+        logger.info("\n--- ORGANIZAÇÃO CONCLUÍDA! ---")
+        logger.info(f"Total de arquivos movidos: {arquivos_movidos}")
+        logger.info(f"Total de arquivos com erro: {arquivos_com_erro}")
         
-print(f"Total de itens ignorados (pastas, ocultos): {arquivos_ignorados}") 
-print(f"Verifique a pasta: {pasta_origem}")
+logger.info(f"Total de itens ignorados (pastas, ocultos): {arquivos_ignorados}") 
+logger.info(f"Verifique a pasta: {pasta_origem}")

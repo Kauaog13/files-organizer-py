@@ -1,0 +1,41 @@
+# Arquivos e diretórios de log
+# Ignora todos os arquivos dentro da pasta 'logs/' e a própria pasta 'logs/'
+logs/
+
+# Ambientes virtuais
+# Pastas comuns de ambientes virtuais criadas por ferramentas como venv, pipenv, poetry
+.venv/
+venv/
+env/
+.env/
+
+# Arquivos de cache e de compilação do Python
+__pycache__/
+*.pyc
+*.pyd
+*.so
+*.egg-info/
+.pytest_cache/
+htmlcov/
+.coverage
+
+# Arquivos de banco de dados e dados temporários
+*.db
+*.sqlite
+*.sqlite3
+*.csv.tmp
+*.json.tmp
+
+# Arquivos de IDEs e editores de texto
+.vscode/        # Pasta de configurações do VS Code
+.idea/          # Pasta de configurações do PyCharm/IntelliJ
+*.sublime-project
+*.sublime-workspace
+.DS_Store       # Arquivos de metadados do macOS
+
+# Outros arquivos temporários ou gerados
+*.zip
+*.rar
+*.7z
+*.tmp
+*.bak
