@@ -19,6 +19,7 @@ class TextWidgetHandler(logging.Handler):
         # Usamos master.after para garantir que a atualização da GUI seja thread-safe
         # e ocorra na thread principal do Tkinter.
         if self.text_widget.winfo_exists(): # Verifica se o widget ainda existe
+            # after(0, ...) agenda a função para ser executada na próxima iteração do mainloop
             self.text_widget.after(0, self._update_text_widget, msg)
 
     def _update_text_widget(self, msg):
@@ -40,7 +41,8 @@ def setup_logging(base_dir, gui_text_widget=None):
     Se um widget de texto da GUI for fornecido, ele também receberá logs.
 
     Args:
-        base_dir (str): O diretório base do projeto (onde src/ está).
+        base_dir (str): O diretório base do script que chama (ex: src/gui_app.py)
+                        Usado para derivar o caminho da pasta de logs.
         gui_text_widget (tkinter.scrolledtext.ScrolledText, optional): Widget de texto da GUI para logs.
     """
     logger = logging.getLogger('files_organizer_py') # Dê um nome específico ao seu logger
@@ -54,6 +56,7 @@ def setup_logging(base_dir, gui_text_widget=None):
     formatter = logging.Formatter('%(asctime)s - %(levelname)s - %(message)s')
 
     # Handler para arquivo (grava TUDO a partir de INFO)
+    # A pasta de logs será relativa ao BASE_DIR do gui_app.py
     logs_dir = os.path.join(base_dir, '..', 'logs')
     os.makedirs(logs_dir, exist_ok=True) # Garante que a pasta de logs exista
     log_filename = datetime.now().strftime("organizer_%Y%m%d_%H%M%S.log")
@@ -64,7 +67,7 @@ def setup_logging(base_dir, gui_text_widget=None):
     logger.addHandler(file_handler)
 
     # Handler para console (grava apenas WARNING, ERROR, CRITICAL)
-    console_handler = logging.StreamHandler(sys.stdout)
+    console_handler = logging.StreamHandler(sys.stdout) # sys.stdout para garantir que vá para a saída padrão
     console_handler.setLevel(logging.WARNING) # Nível WARNING para o console (apenas avisos e erros)
     console_handler.setFormatter(formatter)
     logger.addHandler(console_handler)
@@ -77,5 +80,4 @@ def setup_logging(base_dir, gui_text_widget=None):
         gui_handler_instance.setFormatter(formatter)
         logger.addHandler(gui_handler_instance)
     
-    # Retorna o logger E a instância do handler da GUI (para poder mudar o nível depois)
     return logger, gui_handler_instance

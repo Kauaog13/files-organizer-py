@@ -4,6 +4,8 @@ import os
 import shutil
 import json
 import logging
+# Importa a nova utilidade para caminhos
+from utils.path_utils import get_resource_path
 
 logger = logging.getLogger('files_organizer_py')
 
@@ -16,12 +18,16 @@ def get_unique_filename(destination_path, original_filename):
     counter = 1
     new_filename = original_filename
     
+    # Enquanto o novo caminho completo existir, tenta um novo nome
     while os.path.exists(os.path.join(destination_path, new_filename)):
         new_filename = f"{base} ({counter}){ext}"
         counter += 1
     return new_filename
 
-EXCLUDE_CONFIG_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', 'config', 'exclude_list.json')
+# --- Usa get_resource_path para definir os caminhos dos arquivos de configuração ---
+CATEGORIES_CONFIG_PATH = get_resource_path('config/categories.json')
+EXCLUDE_CONFIG_PATH = get_resource_path('config/exclude_list.json')
+
 
 def load_exclusions(config_path):
     """Carrega a lista de arquivos e pastas a serem excluídos do arquivo JSON."""
@@ -32,7 +38,7 @@ def load_exclusions(config_path):
         return exclusions
     except FileNotFoundError:
         logger.warning(f"Aviso: O arquivo de exclusão '{config_path}' não foi encontrado. Nenhuma exclusão será aplicada.")
-        return {"exclude_files": [], "exclude_folders": []}
+        return {"exclude_files": [], "exclude_folders": []} # Retorna vazio se não encontrado
     except json.JSONDecodeError:
         logger.error(f"Erro: O arquivo '{config_path}' não é um JSON válido. Lista de exclusão ignorada.")
         return {"exclude_files": [], "exclude_folders": []}
@@ -69,6 +75,7 @@ def organize_files(source_folder, categories_config_path):
     logger.info(f"Iniciando análise da pasta: {source_folder}")
 
     try:
+        # Usa o caminho correto para o categories.json
         categorias = load_categories(categories_config_path)
     except Exception:
         return {"status": "error", "message": "Falha ao carregar categorias."}
@@ -77,6 +84,7 @@ def organize_files(source_folder, categories_config_path):
     if categoria_outros not in categorias:
         categorias[categoria_outros] = []
 
+    # Carregar a lista de exclusões usando o caminho correto
     exclusions = load_exclusions(EXCLUDE_CONFIG_PATH)
     exclude_files_list = [f.lower() for f in exclusions.get("exclude_files", [])]
     exclude_folders_list = [f.lower() for f in exclusions.get("exclude_folders", [])]
@@ -141,7 +149,6 @@ def organize_files(source_folder, categories_config_path):
     
     return {"status": "planned", "planned_moves": movimentos_planejados, "ignored": arquivos_ignorados}
 
-# --- Função execute_moves (COM MUDANÇAS AQUI PARA CALLBACK) ---
 def execute_moves(planned_moves, progress_callback=None):
     """
     Executa os movimentos de arquivo planejados.

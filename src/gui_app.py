@@ -1,35 +1,38 @@
 # src/gui_app.py
 
 import tkinter as tk
-from tkinter import filedialog, messagebox, scrolledtext, ttk # Importa ttk para combobox e progressbar
+from tkinter import filedialog, messagebox, scrolledtext, ttk
 import os
 import threading
 import json
-import logging # Importar logging para níveis de log
+import logging
 
 # Importa as lógicas de outros módulos
 from core.organizer_logic import organize_files, execute_moves
-from utils.logger_config import setup_logging, TextWidgetHandler # Importa o TextWidgetHandler também
+from utils.logger_config import setup_logging
+from utils.path_utils import get_resource_path # Importa a nova utilidade de caminho
 
 # --- Caminho para as configurações do aplicativo ---
-BASE_DIR_GUI = os.path.dirname(os.path.abspath(__file__))
-APP_SETTINGS_PATH = os.path.join(BASE_DIR_GUI, '..', 'config', 'app_settings.json')
+# Usa get_resource_path para garantir que o caminho funcione no executável
+APP_SETTINGS_PATH = get_resource_path('config/app_settings.json')
 
 
 class FileOrganizerApp:
     def __init__(self, master):
         self.master = master
         master.title("File Organizer Py")
-        master.geometry("800x600") # Aumenta um pouco a janela
+        master.geometry("800x600")
         master.resizable(True, True)
 
-        self.base_dir = os.path.dirname(os.path.abspath(__file__))
-        self.categories_config_path = os.path.join(self.base_dir, '..', 'config', 'categories.json')
+        # BASE_DIR agora é apenas para logger_config
+        self.base_dir = os.path.dirname(os.path.abspath(__file__)) 
+        # Categoria config path também usará get_resource_path
+        self.categories_config_path = get_resource_path('config/categories.json')
         self.app_settings_path = APP_SETTINGS_PATH
 
         self.create_widgets()
 
-        # Configura o logger para a GUI
+        # Configura o logger para a GUI, passando o widget de texto
         self.logger, self.gui_log_handler = setup_logging(self.base_dir, self.log_text)
         self.logger.info("Aplicação File Organizer Py iniciada.")
         self.logger.info("-" * 40)
@@ -94,9 +97,8 @@ class FileOrganizerApp:
     def change_gui_log_level(self, event=None):
         """Altera o nível de log exibido na GUI com base na seleção do combobox."""
         selected_level_str = self.log_level_var.get()
-        # Converte a string do nível para o valor numérico do logging
         log_level = getattr(logging, selected_level_str, logging.INFO)
-        if self.gui_log_handler: # Garante que o handler existe
+        if self.gui_log_handler:
             self.gui_log_handler.setLevel(log_level)
             self.logger.info(f"Nível de log da GUI alterado para: {selected_level_str}")
         else:
@@ -104,6 +106,7 @@ class FileOrganizerApp:
 
 
     def load_app_settings(self):
+        """Carrega as configurações do aplicativo, incluindo a última pasta usada."""
         try:
             with open(self.app_settings_path, 'r', encoding='utf-8') as f:
                 settings = json.load(f)
@@ -124,8 +127,10 @@ class FileOrganizerApp:
             self.logger.error(f"Erro inesperado ao carregar configurações do app: {e}")
 
     def save_app_settings(self, last_folder_path):
+        """Salva as configurações do aplicativo, incluindo a última pasta usada."""
         settings = {"last_folder": last_folder_path}
         try:
+            # Garante que a pasta config exista antes de tentar escrever nela
             os.makedirs(os.path.dirname(self.app_settings_path), exist_ok=True) 
             with open(self.app_settings_path, 'w', encoding='utf-8') as f:
                 json.dump(settings, f, indent=4)
@@ -134,9 +139,11 @@ class FileOrganizerApp:
             self.logger.error(f"Erro ao salvar configurações do app: {e}")
 
     def on_closing(self):
+        """Chamado quando a janela é fechada, para salvar configurações."""
         current_folder = self.folder_path_var.get()
         self.save_app_settings(current_folder)
         self.master.destroy()
+
 
     def browse_folder(self):
         folder_selected = filedialog.askdirectory()
@@ -217,11 +224,11 @@ class FileOrganizerApp:
             messagebox.showinfo("Organização Cancelada", "A organização foi cancelada.")
             self.save_app_settings(self.folder_path_var.get())
 
-        self.reset_buttons() # Reabilita botões no final da execução
+        self.reset_buttons()
 
     def update_progress_callback(self, current, total):
         """Callback para atualizar a barra de progresso e o rótulo."""
-        self.master.after(0, self._update_progress_ui, current, total) # Thread-safe update
+        self.master.after(0, self._update_progress_ui, current, total)
 
     def _update_progress_ui(self, current, total):
         """Função interna para atualizar a UI do progresso na thread principal."""
@@ -266,7 +273,6 @@ class FileOrganizerApp:
         button_frame = tk.Frame(dialog, pady=10)
         button_frame.pack(pady=5)
 
-        # Variável para armazenar a decisão do usuário
         self.dialog_result = False
 
         def confirm_action():
@@ -283,7 +289,6 @@ class FileOrganizerApp:
         cancel_button = tk.Button(button_frame, text="Cancelar", command=cancel_action, width=20)
         cancel_button.pack(side=tk.RIGHT, padx=5)
         
-        # Espera até que a janela de diálogo seja fechada
         self.master.wait_window(dialog)
         return self.dialog_result
 
