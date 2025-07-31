@@ -16,10 +16,21 @@ class TextWidgetHandler(logging.Handler):
 
     def emit(self, record):
         msg = self.format(record)
-        self.text_widget.config(state=tk.NORMAL) # Habilita para escrita
-        self.text_widget.insert(tk.END, msg + '\n') # Insere a mensagem no final
-        self.text_widget.see(tk.END) # Rola para o final
-        self.text_widget.config(state=tk.DISABLED) # Desabilita novamente
+        # Usamos master.after para garantir que a atualização da GUI seja thread-safe
+        # e ocorra na thread principal do Tkinter.
+        if self.text_widget.winfo_exists(): # Verifica se o widget ainda existe
+            self.text_widget.after(0, self._update_text_widget, msg)
+
+    def _update_text_widget(self, msg):
+        """Função interna para atualizar o widget na thread principal."""
+        try:
+            self.text_widget.config(state='normal') # Habilita para escrita
+            self.text_widget.insert(tk.END, msg + '\n') # Insere a mensagem no final
+            self.text_widget.see(tk.END) # Rola para o final
+            self.text_widget.config(state='disabled') # Desabilita novamente
+        except tk.TclError:
+            # Widget pode ter sido destruído enquanto a thread de log tentava atualizar
+            pass # Ignora silenciosamente
 
 def setup_logging(base_dir, gui_text_widget=None):
     """
@@ -32,16 +43,6 @@ def setup_logging(base_dir, gui_text_widget=None):
         base_dir (str): O diretório base do projeto (onde src/ está).
         gui_text_widget (tkinter.scrolledtext.ScrolledText, optional): Widget de texto da GUI para logs.
     """
-    logs_dir = os.path.join(base_dir, '..', 'logs')
-
-    # Garante que a pasta de logs exista
-    os.makedirs(logs_dir, exist_ok=True)
-
-    # Cria um nome de arquivo de log único com carimbo de data/hora
-    log_filename = datetime.now().strftime("organizer_%Y%m%d_%H%M%S.log")
-    log_filepath = os.path.join(logs_dir, log_filename)
-
-    # Cria um logger principal para a aplicação
     logger = logging.getLogger('files_organizer_py') # Dê um nome específico ao seu logger
     logger.setLevel(logging.INFO) # O logger principal deve processar todos os níveis a partir de INFO
 
@@ -53,22 +54,28 @@ def setup_logging(base_dir, gui_text_widget=None):
     formatter = logging.Formatter('%(asctime)s - %(levelname)s - %(message)s')
 
     # Handler para arquivo (grava TUDO a partir de INFO)
+    logs_dir = os.path.join(base_dir, '..', 'logs')
+    os.makedirs(logs_dir, exist_ok=True) # Garante que a pasta de logs exista
+    log_filename = datetime.now().strftime("organizer_%Y%m%d_%H%M%S.log")
+    log_filepath = os.path.join(logs_dir, log_filename)
     file_handler = logging.FileHandler(log_filepath, encoding='utf-8')
     file_handler.setLevel(logging.INFO) # Nível INFO para o arquivo (tudo detalhado)
     file_handler.setFormatter(formatter)
     logger.addHandler(file_handler)
 
     # Handler para console (grava apenas WARNING, ERROR, CRITICAL)
-    console_handler = logging.StreamHandler(sys.stdout) # sys.stdout para garantir que vá para a saída padrão
+    console_handler = logging.StreamHandler(sys.stdout)
     console_handler.setLevel(logging.WARNING) # Nível WARNING para o console (apenas avisos e erros)
     console_handler.setFormatter(formatter)
     logger.addHandler(console_handler)
-    
+
     # Handler para o widget de texto da GUI (se fornecido)
+    gui_handler_instance = None # Para retornar a instância
     if gui_text_widget:
-        gui_handler = TextWidgetHandler(gui_text_widget)
-        gui_handler.setLevel(logging.INFO) # A GUI pode receber INFO para mostrar mais detalhes
-        gui_handler.setFormatter(formatter)
-        logger.addHandler(gui_handler)
+        gui_handler_instance = TextWidgetHandler(gui_text_widget)
+        gui_handler_instance.setLevel(logging.INFO) # Nível inicial da GUI: INFO (detalhado)
+        gui_handler_instance.setFormatter(formatter)
+        logger.addHandler(gui_handler_instance)
     
-    return logger
+    # Retorna o logger E a instância do handler da GUI (para poder mudar o nível depois)
+    return logger, gui_handler_instance

@@ -1,17 +1,17 @@
 # src/gui_app.py
 
 import tkinter as tk
-from tkinter import filedialog, messagebox, scrolledtext
+from tkinter import filedialog, messagebox, scrolledtext, ttk # Importa ttk para combobox e progressbar
 import os
 import threading
-import json # Importar json para as configurações do app
+import json
+import logging # Importar logging para níveis de log
 
 # Importa as lógicas de outros módulos
 from core.organizer_logic import organize_files, execute_moves
-from utils.logger_config import setup_logging
+from utils.logger_config import setup_logging, TextWidgetHandler # Importa o TextWidgetHandler também
 
 # --- Caminho para as configurações do aplicativo ---
-# Obtenha o diretório base do arquivo atual (gui_app.py)
 BASE_DIR_GUI = os.path.dirname(os.path.abspath(__file__))
 APP_SETTINGS_PATH = os.path.join(BASE_DIR_GUI, '..', 'config', 'app_settings.json')
 
@@ -20,26 +20,23 @@ class FileOrganizerApp:
     def __init__(self, master):
         self.master = master
         master.title("File Organizer Py")
-        master.geometry("700x500")
+        master.geometry("800x600") # Aumenta um pouco a janela
         master.resizable(True, True)
 
         self.base_dir = os.path.dirname(os.path.abspath(__file__))
         self.categories_config_path = os.path.join(self.base_dir, '..', 'config', 'categories.json')
-        self.app_settings_path = APP_SETTINGS_PATH # Usar o caminho global
+        self.app_settings_path = APP_SETTINGS_PATH
 
         self.create_widgets()
 
-        # Configura o logger para a GUI, passando o widget de texto
-        self.logger = setup_logging(self.base_dir, self.log_text)
+        # Configura o logger para a GUI
+        self.logger, self.gui_log_handler = setup_logging(self.base_dir, self.log_text)
         self.logger.info("Aplicação File Organizer Py iniciada.")
         self.logger.info("-" * 40)
         
-        # Carregar a última pasta ao iniciar
         self.load_app_settings()
-        
         self.logger.info("Selecione a pasta para organizar e clique em 'Iniciar Organização'.")
 
-        # Adicionar protocolo de fechamento para salvar configurações
         self.master.protocol("WM_DELETE_WINDOW", self.on_closing)
 
 
@@ -59,6 +56,24 @@ class FileOrganizerApp:
         self.browse_button = tk.Button(folder_frame, text="Procurar Pasta", command=self.browse_folder)
         self.browse_button.pack(side=tk.RIGHT)
 
+        # Seção de log level e barra de progresso
+        options_frame = tk.Frame(main_frame, pady=5)
+        options_frame.pack(fill=tk.X)
+
+        # Controle de Nível de Log na GUI
+        tk.Label(options_frame, text="Nível de Log:").pack(side=tk.LEFT, padx=(0, 5))
+        self.log_level_var = tk.StringVar(value="INFO") # Nível padrão
+        self.log_level_combobox = ttk.Combobox(options_frame, textvariable=self.log_level_var,
+                                               values=["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"], state="readonly")
+        self.log_level_combobox.pack(side=tk.LEFT, padx=(0, 15))
+        self.log_level_combobox.bind("<<ComboboxSelected>>", self.change_gui_log_level)
+
+        # Barra de Progresso
+        self.progress_bar = ttk.Progressbar(options_frame, orient="horizontal", length=200, mode="determinate")
+        self.progress_bar.pack(side=tk.LEFT, fill=tk.X, expand=True, padx=(0, 5))
+        self.progress_label = tk.Label(options_frame, text="0/0")
+        self.progress_label.pack(side=tk.LEFT)
+
         # Seção de botões de ação
         action_frame = tk.Frame(main_frame, pady=5)
         action_frame.pack(fill=tk.X)
@@ -75,34 +90,42 @@ class FileOrganizerApp:
 
         self.log_text = scrolledtext.ScrolledText(log_frame, wrap=tk.WORD, height=15)
         self.log_text.pack(fill=tk.BOTH, expand=True)
-        # O handler de log para a GUI é configurado em __init__ após a criação de self.log_text
+
+    def change_gui_log_level(self, event=None):
+        """Altera o nível de log exibido na GUI com base na seleção do combobox."""
+        selected_level_str = self.log_level_var.get()
+        # Converte a string do nível para o valor numérico do logging
+        log_level = getattr(logging, selected_level_str, logging.INFO)
+        if self.gui_log_handler: # Garante que o handler existe
+            self.gui_log_handler.setLevel(log_level)
+            self.logger.info(f"Nível de log da GUI alterado para: {selected_level_str}")
+        else:
+            self.logger.warning("Handler de log da GUI não encontrado para alterar o nível.")
+
 
     def load_app_settings(self):
-        """Carrega as configurações do aplicativo, incluindo a última pasta usada."""
         try:
             with open(self.app_settings_path, 'r', encoding='utf-8') as f:
                 settings = json.load(f)
             last_folder = settings.get("last_folder", "")
-            if os.path.isdir(last_folder): # Verifica se a pasta ainda existe
+            if os.path.isdir(last_folder):
                 self.folder_path_var.set(last_folder)
-                self.start_button.config(state=tk.NORMAL) # Habilita se a pasta for válida
+                self.start_button.config(state=tk.NORMAL)
                 self.logger.info(f"Última pasta utilizada carregada: '{last_folder}'")
             else:
                 self.logger.info("Última pasta utilizada não encontrada ou inválida.")
         except FileNotFoundError:
             self.logger.warning(f"Arquivo de configurações do app '{self.app_settings_path}' não encontrado. Criando um novo.")
-            self.save_app_settings("") # Cria o arquivo vazio
+            self.save_app_settings("")
         except json.JSONDecodeError:
             self.logger.error(f"Erro ao ler arquivo de configurações do app '{self.app_settings_path}'. Reiniciando configurações.")
-            self.save_app_settings("") # Reinicia em caso de erro no JSON
+            self.save_app_settings("")
         except Exception as e:
             self.logger.error(f"Erro inesperado ao carregar configurações do app: {e}")
 
     def save_app_settings(self, last_folder_path):
-        """Salva as configurações do aplicativo, incluindo a última pasta usada."""
         settings = {"last_folder": last_folder_path}
         try:
-            # Garante que a pasta config exista antes de tentar escrever nela
             os.makedirs(os.path.dirname(self.app_settings_path), exist_ok=True) 
             with open(self.app_settings_path, 'w', encoding='utf-8') as f:
                 json.dump(settings, f, indent=4)
@@ -111,11 +134,9 @@ class FileOrganizerApp:
             self.logger.error(f"Erro ao salvar configurações do app: {e}")
 
     def on_closing(self):
-        """Chamado quando a janela é fechada, para salvar configurações."""
         current_folder = self.folder_path_var.get()
         self.save_app_settings(current_folder)
-        self.master.destroy() # Fecha a janela
-
+        self.master.destroy()
 
     def browse_folder(self):
         folder_selected = filedialog.askdirectory()
@@ -138,6 +159,10 @@ class FileOrganizerApp:
         self.log_text.config(state='normal')
         self.log_text.delete(1.0, tk.END)
         self.log_text.config(state='disabled')
+        
+        # Reseta a barra de progresso
+        self.progress_bar['value'] = 0
+        self.progress_label.config(text="0/0")
 
         self.logger.info("Iniciando processo de organização em segundo plano...")
         # Cria uma nova thread para a organização para não travar a GUI
@@ -164,21 +189,19 @@ class FileOrganizerApp:
             self.reset_buttons()
             return
 
-        # Confirmação antes de executar os movimentos
+        # Visualização de Pré-organização (Dry Run Melhorado)
         planned_moves = result_analysis["planned_moves"]
         ignored_files = result_analysis["ignored"]
         
-        confirmation_message = (
-            f"Foram encontrados {len(planned_moves)} arquivo(s) para organizar.\n"
-            f"Serão ignorados {ignored_files} item(s) (pastas/ocultos).\n\n"
-            "Deseja prosseguir com a organização?"
-        )
-        
-        confirm = messagebox.askyesno("Confirmar Organização", confirmation_message)
+        # --- Abre a janela de pré-organização ---
+        confirm_proceed = self.show_pre_organization_dialog(planned_moves, ignored_files)
 
-        if confirm:
+        if confirm_proceed:
             self.logger.info("Confirmação recebida. Executando movimentos...")
-            result_execution = execute_moves(planned_moves)
+            # Define o total para a barra de progresso
+            self.progress_bar['maximum'] = len(planned_moves)
+
+            result_execution = execute_moves(planned_moves, self.update_progress_callback)
             
             final_message = (
                 f"Organização Concluída!\n\n"
@@ -188,20 +211,87 @@ class FileOrganizerApp:
             )
             messagebox.showinfo("Organização Concluída", final_message)
             self.logger.info(final_message)
-            self.save_app_settings(source_folder) # Salva a pasta que acabou de ser organizada
+            self.save_app_settings(source_folder)
         else:
             self.logger.info("Organização cancelada pelo usuário.")
             messagebox.showinfo("Organização Cancelada", "A organização foi cancelada.")
-            self.save_app_settings(self.folder_path_var.get()) # Salva a pasta mesmo se cancelar
+            self.save_app_settings(self.folder_path_var.get())
 
         self.reset_buttons() # Reabilita botões no final da execução
 
+    def update_progress_callback(self, current, total):
+        """Callback para atualizar a barra de progresso e o rótulo."""
+        self.master.after(0, self._update_progress_ui, current, total) # Thread-safe update
+
+    def _update_progress_ui(self, current, total):
+        """Função interna para atualizar a UI do progresso na thread principal."""
+        self.progress_bar['value'] = current
+        self.progress_label.config(text=f"{current}/{total}")
+
+
+    def show_pre_organization_dialog(self, planned_moves, ignored_files):
+        """Mostra uma janela com a lista de arquivos a serem organizados e pede confirmação."""
+        dialog = tk.Toplevel(self.master)
+        dialog.title("Revisar Organização")
+        dialog.geometry("600x450")
+        dialog.transient(self.master) # Torna a janela um popup modal
+        dialog.grab_set() # Bloqueia a interação com a janela principal
+
+        tk.Label(dialog, text=f"Total de {len(planned_moves)} arquivo(s) planejado(s) para organização.").pack(pady=5)
+        tk.Label(dialog, text=f"Serão ignorados {ignored_files} item(s) (pastas/ocultos).").pack()
+        tk.Label(dialog, text="Revisar os movimentos propostos:").pack(pady=5)
+
+        # Treeview para exibir os movimentos
+        tree_frame = tk.Frame(dialog)
+        tree_frame.pack(fill=tk.BOTH, expand=True, padx=10, pady=5)
+
+        tree = ttk.Treeview(tree_frame, columns=("Original File", "Destination Folder"), show="headings")
+        tree.heading("Original File", text="Arquivo Original")
+        tree.heading("Destination Folder", text="Pasta de Destino")
+        tree.column("Original File", width=250, anchor=tk.W)
+        tree.column("Destination Folder", width=250, anchor=tk.W)
+
+        # Adiciona scrollbars
+        vsb = ttk.Scrollbar(tree_frame, orient="vertical", command=tree.yview)
+        hsb = ttk.Scrollbar(tree_frame, orient="horizontal", command=tree.xview)
+        tree.configure(yscrollcommand=vsb.set, xscrollcommand=hsb.set)
+        vsb.pack(side="right", fill="y")
+        hsb.pack(side="bottom", fill="x")
+        tree.pack(fill=tk.BOTH, expand=True)
+
+        for move in planned_moves:
+            tree.insert("", tk.END, values=(move["arquivo"], move["destino_nome_curto"]))
+
+        # Botões de Confirmação na janela de diálogo
+        button_frame = tk.Frame(dialog, pady=10)
+        button_frame.pack(pady=5)
+
+        # Variável para armazenar a decisão do usuário
+        self.dialog_result = False
+
+        def confirm_action():
+            self.dialog_result = True
+            dialog.destroy()
+
+        def cancel_action():
+            self.dialog_result = False
+            dialog.destroy()
+
+        confirm_button = tk.Button(button_frame, text="Confirmar e Organizar", command=confirm_action, width=20)
+        confirm_button.pack(side=tk.LEFT, padx=5)
+
+        cancel_button = tk.Button(button_frame, text="Cancelar", command=cancel_action, width=20)
+        cancel_button.pack(side=tk.RIGHT, padx=5)
+        
+        # Espera até que a janela de diálogo seja fechada
+        self.master.wait_window(dialog)
+        return self.dialog_result
+
+
     def cancel_organization(self):
-        # A implementação de um cancelamento real (interrupção da thread) é mais complexa.
-        # Por enquanto, apenas desabilita o botão e notifica.
         self.logger.warning("Solicitação de cancelamento. A organização pode levar um tempo para parar.")
         messagebox.showinfo("Cancelamento", "O cancelamento é limitado no momento. Por favor, aguarde a conclusão da operação atual ou feche o aplicativo.")
-        self.reset_buttons() # Reabilita os botões
+        self.reset_buttons()
 
     def reset_buttons(self):
         self.start_button.config(state=tk.NORMAL if self.folder_path_var.get() and os.path.isdir(self.folder_path_var.get()) else tk.DISABLED)

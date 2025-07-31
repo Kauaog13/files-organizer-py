@@ -1,3 +1,5 @@
+# src/core/organizer_logic.py
+
 import os
 import shutil
 import json
@@ -5,7 +7,6 @@ import logging
 
 logger = logging.getLogger('files_organizer_py')
 
-# --- Nova Função para Gerar Nome de Arquivo Único ---
 def get_unique_filename(destination_path, original_filename):
     """
     Gera um nome de arquivo único adicionando um sufixo numérico se o arquivo já existir.
@@ -15,18 +16,13 @@ def get_unique_filename(destination_path, original_filename):
     counter = 1
     new_filename = original_filename
     
-    # Enquanto o novo caminho completo existir, tenta um novo nome
     while os.path.exists(os.path.join(destination_path, new_filename)):
         new_filename = f"{base} ({counter}){ext}"
         counter += 1
     return new_filename
 
-# --- Nova variável de caminho para o arquivo de exclusão ---
-# Usamos os.path.dirname(os.path.abspath(__file__)) para obter o diretório do arquivo atual (organizer_logic.py)
-# e então navegar até 'config'
 EXCLUDE_CONFIG_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', 'config', 'exclude_list.json')
 
-# --- Nova Função para Carregar Exclusões ---
 def load_exclusions(config_path):
     """Carrega a lista de arquivos e pastas a serem excluídos do arquivo JSON."""
     try:
@@ -36,7 +32,7 @@ def load_exclusions(config_path):
         return exclusions
     except FileNotFoundError:
         logger.warning(f"Aviso: O arquivo de exclusão '{config_path}' não foi encontrado. Nenhuma exclusão será aplicada.")
-        return {"exclude_files": [], "exclude_folders": []} # Retorna vazio se não encontrado
+        return {"exclude_files": [], "exclude_folders": []}
     except json.JSONDecodeError:
         logger.error(f"Erro: O arquivo '{config_path}' não é um JSON válido. Lista de exclusão ignorada.")
         return {"exclude_files": [], "exclude_folders": []}
@@ -53,7 +49,7 @@ def load_categories(config_path):
         return categories
     except FileNotFoundError:
         logger.error(f"Erro: O arquivo de configurações de categorias '{config_path}' não foi encontrado.")
-        raise # Levanta a exceção para que o chamador (GUI) possa tratá-la
+        raise
     except json.JSONDecodeError:
         logger.error(f"Erro: O arquivo '{config_path}' não é um JSON válido. Verifique a sintaxe.")
         raise
@@ -81,7 +77,6 @@ def organize_files(source_folder, categories_config_path):
     if categoria_outros not in categorias:
         categorias[categoria_outros] = []
 
-    # Carregar a lista de exclusões
     exclusions = load_exclusions(EXCLUDE_CONFIG_PATH)
     exclude_files_list = [f.lower() for f in exclusions.get("exclude_files", [])]
     exclude_folders_list = [f.lower() for f in exclusions.get("exclude_folders", [])]
@@ -90,7 +85,6 @@ def organize_files(source_folder, categories_config_path):
     arquivos_ignorados = 0
 
     for nome_item in os.listdir(source_folder):
-        # Verificar se o item está na lista de exclusão de arquivos
         if nome_item.lower() in exclude_files_list:
             logger.info(f"Ignorando arquivo por estar na lista de exclusão: '{nome_item}'")
             arquivos_ignorados += 1
@@ -99,7 +93,6 @@ def organize_files(source_folder, categories_config_path):
         caminho_completo_item = os.path.join(source_folder, nome_item)
 
         if os.path.isdir(caminho_completo_item):
-            # Verificar se a pasta está na lista de exclusão de pastas
             if nome_item.lower() in exclude_folders_list:
                 logger.info(f"Ignorando pasta por estar na lista de exclusão: '{nome_item}'")
                 arquivos_ignorados += 1
@@ -112,7 +105,7 @@ def organize_files(source_folder, categories_config_path):
             arquivos_ignorados += 1
             continue
         
-        if nome_item.startswith('.'): # Ignora arquivos ocultos (comuns em sistemas Linux/macOS)
+        if nome_item.startswith('.'):
             logger.info(f"Ignorando arquivo oculto: '{nome_item}'")
             arquivos_ignorados += 1
             continue
@@ -148,14 +141,19 @@ def organize_files(source_folder, categories_config_path):
     
     return {"status": "planned", "planned_moves": movimentos_planejados, "ignored": arquivos_ignorados}
 
-def execute_moves(planned_moves):
+# --- Função execute_moves (COM MUDANÇAS AQUI PARA CALLBACK) ---
+def execute_moves(planned_moves, progress_callback=None):
     """
     Executa os movimentos de arquivo planejados.
+    Args:
+        planned_moves (list): Lista de movimentos planejados.
+        progress_callback (callable, optional): Função a ser chamada com (current, total) progresso.
     """
     arquivos_movidos = 0
     arquivos_com_erro = 0
+    total_moves = len(planned_moves)
 
-    for movimento in planned_moves:
+    for i, movimento in enumerate(planned_moves):
         arquivo = movimento["arquivo"]
         origem = movimento["origem"]
         destino_pasta = movimento["destino_pasta"]
@@ -165,7 +163,7 @@ def execute_moves(planned_moves):
         final_filename = get_unique_filename(destino_pasta, arquivo)
         final_destination_path = os.path.join(destino_pasta, final_filename)
 
-        logger.info(f"Executando '{arquivo}' -> '{destino_nome_curto}{os.sep}{final_filename}'...")
+        logger.info(f"Executando ({i+1}/{total_moves}) '{arquivo}' -> '{destino_nome_curto}{os.sep}{final_filename}'...")
         try:
             os.makedirs(destino_pasta, exist_ok=True)
             shutil.move(origem, final_destination_path)
@@ -178,5 +176,9 @@ def execute_moves(planned_moves):
         except Exception as e:
             logger.critical(f"  !!! ERRO CRÍTICO INESPERADO ao processar '{arquivo}': {e}")
             arquivos_com_erro += 1
+        
+        # Chamar o callback de progresso se fornecido
+        if progress_callback:
+            progress_callback(i + 1, total_moves)
     
     return {"status": "done", "moved": arquivos_movidos, "errors": arquivos_com_erro}
