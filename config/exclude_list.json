@@ -1,0 +1,14 @@
+{
+    "exclude_files": [
+        "Thumbs.db",
+        ".DS_Store",
+        "desktop.ini"
+    ],
+    "exclude_folders": [
+        "__pycache__",
+        ".venv",
+        "venv",
+        "node_modules",
+        "$RECYCLE.BIN"
+    ]
+}

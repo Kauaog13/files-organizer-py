@@ -1,9 +1,7 @@
 # Arquivos e diretórios de log
-# Ignora todos os arquivos dentro da pasta 'logs/' e a própria pasta 'logs/'
 logs/
 
 # Ambientes virtuais
-# Pastas comuns de ambientes virtuais criadas por ferramentas como venv, pipenv, poetry
 .venv/
 venv/
 env/
@@ -17,7 +15,6 @@ __pycache__/
 *.egg-info/
 .pytest_cache/
 htmlcov/
-.coverage
 
 # Arquivos de banco de dados e dados temporários
 *.db
