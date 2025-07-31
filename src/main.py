@@ -1,32 +1,13 @@
 import os
 import shutil
 import json
-import sys # Para usar sys.exit()
+import sys
 
 # --- CONFIGURAÇÃO ---
 # Obtenha o diretório base do script (onde main.py está)
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 # Caminho para o arquivo de configurações de categorias
 CATEGORIES_CONFIG_PATH = os.path.join(BASE_DIR, '..', 'config', 'categories.json')
-
-# Solicita a pasta de origem ao usuário
-while True:
-    pasta_origem_input = input("Digite o caminho completo da pasta que deseja organizar (ou 'sair' para encerrar): ").strip()
-
-    if pasta_origem_input.lower() == 'sair':
-        print("Organizador encerrado pelo usuário.")
-        sys.exit(0) # Sai do script sem erro
-
-    # Converte o caminho para um formato compatível com o SO atual
-    # Isso ajuda a lidar com barras invertidas/normais inseridas pelo usuário
-    pasta_origem = os.path.normpath(pasta_origem_input)
-
-    if not os.path.isdir(pasta_origem):
-        print(f"Erro: A pasta '{pasta_origem}' não existe ou o caminho está incorreto. Por favor, verifique e tente novamente.")
-    else:
-        break # Sai do loop se a pasta for válida
-
-# ... (restante do código) ...
 
 # --- FUNÇÃO PARA CARREGAR CATEGORIAS ---
 def load_categories(config_path):
@@ -36,7 +17,7 @@ def load_categories(config_path):
         return categories
     except FileNotFoundError:
         print(f"Erro: O arquivo de configurações de categorias '{config_path}' não foi encontrado.")
-        sys.exit(1) # Sai do script com erro
+        sys.exit(1)
     except json.JSONDecodeError:
         print(f"Erro: O arquivo '{config_path}' não é um JSON válido. Verifique a sintaxe.")
         sys.exit(1)
@@ -49,93 +30,118 @@ categorias = load_categories(CATEGORIES_CONFIG_PATH)
 
 # A categoria para arquivos não listados no JSON
 categoria_outros = "Outros"
-if categoria_outros not in categorias: # Garante que "Outros" seja uma categoria válida
-    categorias[categoria_outros] = [] # Adiciona como uma lista vazia, será o destino padrão
+if categoria_outros not in categorias:
+    categorias[categoria_outros] = []
 
-# --- VERIFICAÇÃO INICIAL ---
-if not os.path.isdir(pasta_origem):
-    print(f"Erro: A pasta '{pasta_origem}' não existe. Verifique o caminho e tente novamente.")
-    sys.exit(1) # Sai do script com erro
-
-print(f"--- Iniciando a organização da pasta: {pasta_origem} ---")
+print(f"--- Bem-vindo ao files-organizer-py! ---")
 print("Categorias configuradas:")
 for categoria, extensoes in categorias.items():
-    if categoria != categoria_outros: # Não imprime "Outros" com suas extensões (que é vazia)
+    if categoria != categoria_outros:
         print(f"  {categoria}: {', '.join(extensoes)}")
 print(f"  Arquivos não categorizados irão para: {categoria_outros}")
-print("-" * 40) # Linha divisória
+print("-" * 40)
 
-# --- PROCESSO DE ORGANIZAÇÃO ---
-arquivos_movidos = 0
-arquivos_com_erro = 0
+# --- 1. SOLICITA A PASTA DE ORIGEM AO USUÁRIO ---
+while True:
+    pasta_origem_input = input("Digite o caminho completo da pasta que deseja organizar (ou 'sair' para encerrar): ").strip()
+
+    if pasta_origem_input.lower() == 'sair':
+        print("Organizador encerrado pelo usuário.")
+        sys.exit(0)
+
+    pasta_origem = os.path.normpath(pasta_origem_input)
+
+    if not os.path.isdir(pasta_origem):
+        print(f"Erro: A pasta '{pasta_origem}' não existe ou o caminho está incorreto. Por favor, verifique e tente novamente.")
+    else:
+        break
+
+print(f"\nIniciando análise da pasta: {pasta_origem}")
+
+movimentos_planejados = []
 arquivos_ignorados = 0
 
-# Percorre os itens na pasta de origem
+# --- 2. PERCORRE E ANALISA OS ARQUIVOS NA PASTA DE ORIGEM (FASE DE SIMULAÇÃO) ---
 for nome_item in os.listdir(pasta_origem):
     caminho_completo_item = os.path.join(pasta_origem, nome_item)
 
-    # Ignora pastas (incluindo as pastas de categoria criadas pelo script) e arquivos ocultos
     if os.path.isdir(caminho_completo_item):
-        # Ignora as pastas de destino para evitar loop infinito ou mover pastas erradas
         if nome_item in categorias:
             print(f"Ignorando pasta de categoria: '{nome_item}'")
         else:
-            print(f"Ignorando pasta (não é uma pasta de categoria): '{nome_item}'")
+            print(f"Ignorando pasta: '{nome_item}'")
         arquivos_ignorados += 1
         continue
-
-    # Ignora arquivos ocultos (que começam com '.') no Linux/macOS
+    
     if nome_item.startswith('.'):
         print(f"Ignorando arquivo oculto: '{nome_item}'")
         arquivos_ignorados += 1
         continue
 
-    # Processa apenas arquivos
     if os.path.isfile(caminho_completo_item):
         _, extensao = os.path.splitext(nome_item)
-        extensao = extensao.lower() # Padroniza a extensão para minúsculas
+        extensao = extensao.lower()
 
-        pasta_destino_nome = categoria_outros # Padrão para "Outros"
+        pasta_destino_nome = categoria_outros
         encontrado = False
         for categoria, extensoes_lista in categorias.items():
             if extensao in extensoes_lista:
                 pasta_destino_nome = categoria
                 encontrado = True
-                break # Encontrou a categoria, pode parar de procurar
-
-        if not encontrado and pasta_destino_nome == categoria_outros:
-            print(f"Processando '{nome_item}' (Extensão: '{extensao}') -> Não categorizado, irá para '{categoria_outros}'")
-        else:
-            print(f"Processando '{nome_item}' (Extensão: '{extensao}') -> Categoria: '{pasta_destino_nome}'")
-
-        # Crie o caminho completo da pasta de destino
+                break
+        
         caminho_pasta_destino = os.path.join(pasta_origem, pasta_destino_nome)
-
-        try:
-            # Crie a pasta de destino se ela não existir
-            os.makedirs(caminho_pasta_destino, exist_ok=True)
-
-            # Mova o arquivo
-            shutil.move(caminho_completo_item, caminho_pasta_destino)
-            print(f"  -> Movido para: '{pasta_destino_nome}{os.sep}{nome_item}'")
-            arquivos_movidos += 1
-        except shutil.Error as e:
-            # Captura erros específicos do shutil, como arquivo já existir no destino
-            print(f"  !!! ERRO: Não foi possível mover '{nome_item}'. Motivo: {e}")
-            print(f"  (Verifique se o arquivo já existe no destino ou se há permissões.)")
-            arquivos_com_erro += 1
-        except Exception as e:
-            # Captura outros erros inesperados
-            print(f"  !!! ERRO INESPERADO ao processar '{nome_item}': {e}")
-            arquivos_com_erro += 1
+        
+        movimentos_planejados.append({
+            "arquivo": nome_item,
+            "origem": caminho_completo_item,
+            "destino_pasta": caminho_pasta_destino,
+            "destino_nome_curto": pasta_destino_nome
+        })
+        print(f"  Planejado: '{nome_item}' -> '{pasta_destino_nome}{os.sep}{nome_item}'")
     else:
         print(f"Ignorando item (não é um arquivo nem pasta de categoria): '{nome_item}'")
         arquivos_ignorados += 1
 
+# --- 3. PERGUNTA CONFIRMAÇÃO ANTES DE MOVER ---
+if not movimentos_planejados:
+    print("\nNenhum arquivo elegível para organização foi encontrado.")
+else:
+    print(f"\nTotal de {len(movimentos_planejados)} arquivo(s) planejado(s) para organização.")
+    confirmacao = input("Deseja prosseguir com a organização? (s/n): ").lower().strip()
 
-print("-" * 40)
-print("\n--- ORGANIZAÇÃO CONCLUÍDA! ---")
-print(f"Total de arquivos movidos: {arquivos_movidos}")
-print(f"Total de arquivos com erro: {arquivos_com_erro}")
-print(f"Total de itens ignorados (pastas, ocultos): {arquivos_ignorados}")
+    if confirmacao != 's':
+        print("Organização cancelada pelo usuário.")
+    else:
+        print("\nIniciando execução da organização...")
+        arquivos_movidos = 0
+        arquivos_com_erro = 0
+
+        # --- PROCESSO DE EXECUÇÃO DOS MOVIMENTOS ---
+        for movimento in movimentos_planejados:
+            arquivo = movimento["arquivo"]
+            origem = movimento["origem"]
+            destino_pasta = movimento["destino_pasta"]
+            destino_nome_curto = movimento["destino_nome_curto"]
+
+            print(f"Executando '{arquivo}' -> '{destino_nome_curto}{os.sep}{arquivo}'...")
+            try:
+                os.makedirs(destino_pasta, exist_ok=True)
+                shutil.move(origem, destino_pasta)
+                print(f"  -> Movido com sucesso.")
+                arquivos_movidos += 1
+            except shutil.Error as e:
+                print(f"  !!! ERRO ao mover '{arquivo}'. Motivo: {e}")
+                print(f"  (Verifique se o arquivo já existe no destino ou se há permissões.)")
+                arquivos_com_erro += 1
+            except Exception as e:
+                print(f"  !!! ERRO INESPERADO ao processar '{arquivo}': {e}")
+                arquivos_com_erro += 1
+
+        print("-" * 40)
+        print("\n--- ORGANIZAÇÃO CONCLUÍDA! ---")
+        print(f"Total de arquivos movidos: {arquivos_movidos}")
+        print(f"Total de arquivos com erro: {arquivos_com_erro}")
+        
+print(f"Total de itens ignorados (pastas, ocultos): {arquivos_ignorados}") 
 print(f"Verifique a pasta: {pasta_origem}")

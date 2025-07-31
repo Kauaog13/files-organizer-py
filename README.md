@@ -63,6 +63,6 @@ Ex: imagens, PDFs, músicas, documentos, etc.
 
 ## 6. Execute o projeto pelo terminal:
 ```bash
-python main.py
+python src/main.py
 ```
 Pronto! Seus arquivos serão automaticamente organizados em subpastas baseadas nas extensões 🎯
