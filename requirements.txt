@@ -1,0 +1,6 @@
+# Dependências de execução da aplicação
+
+# Tkinter é incluído na maioria das distribuições Python.
+
+# Dependências para empacotamento
+pyinstaller

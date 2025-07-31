@@ -36,3 +36,8 @@ htmlcov/
 *.7z
 *.tmp
 *.bak
+
+# Pastas geradas pelo PyInstaller
+build/
+dist/
+*.spec
