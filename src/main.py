@@ -9,10 +9,24 @@ BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 # Caminho para o arquivo de configurações de categorias
 CATEGORIES_CONFIG_PATH = os.path.join(BASE_DIR, '..', 'config', 'categories.json')
 
-# Define a pasta que você quer organizar
+# Solicita a pasta de origem ao usuário
+while True:
+    pasta_origem_input = input("Digite o caminho completo da pasta que deseja organizar (ou 'sair' para encerrar): ").strip()
 
-# ATENÇÃO: SUBSTITUA ESTE CAMINHO PARA A SUA PASTA REAL!
-pasta_origem = r"C:\Users\SeuUser\Área de Trabalho\PastaTeste" # <--- ALTERE AQUI!
+    if pasta_origem_input.lower() == 'sair':
+        print("Organizador encerrado pelo usuário.")
+        sys.exit(0) # Sai do script sem erro
+
+    # Converte o caminho para um formato compatível com o SO atual
+    # Isso ajuda a lidar com barras invertidas/normais inseridas pelo usuário
+    pasta_origem = os.path.normpath(pasta_origem_input)
+
+    if not os.path.isdir(pasta_origem):
+        print(f"Erro: A pasta '{pasta_origem}' não existe ou o caminho está incorreto. Por favor, verifique e tente novamente.")
+    else:
+        break # Sai do loop se a pasta for válida
+
+# ... (restante do código) ...
 
 # --- FUNÇÃO PARA CARREGAR CATEGORIAS ---
 def load_categories(config_path):
